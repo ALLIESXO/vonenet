@@ -3,7 +3,7 @@ import torch.nn as nn
 import os
 import requests
 
-from .vonenet import VOneNet
+from vonenet.vonenet import VOneNet
 from torch.nn import Module
 
 FILE_WEIGHTS = {'alexnet': 'vonealexnet_e70.pth.tar', 'resnet50': 'voneresnet50_e70.pth.tar',
@@ -17,7 +17,7 @@ class Wrapper(Module):
         self.module = model
 
 
-def get_model(model_arch=None, pretrained=True, map_location='cpu', **kwargs):
+def get_model(controlled_params=False, model_arch=None, pretrained=True, map_location='cpu', **kwargs):
     """
     Returns a VOneNet model.
     Select pretrained=True for returning one of the 3 pretrained models.
@@ -48,7 +48,7 @@ def get_model(model_arch=None, pretrained=True, map_location='cpu', **kwargs):
 
         model_id = ckpt_data['flags']['arch'].replace('_','').lower()
 
-        model = globals()[f'VOneNet'](model_arch=model_id, stride=stride, k_exc=k_exc,
+        model = globals()[f'VOneNet'](controlled_params=controlled_params, model_arch=model_id, stride=stride, k_exc=k_exc,
                                       simple_channels=simple_channels, complex_channels=complex_channels,
                                       noise_mode=noise_mode, noise_scale=noise_scale, noise_level=noise_level)
 
@@ -63,7 +63,7 @@ def get_model(model_arch=None, pretrained=True, map_location='cpu', **kwargs):
 
         model = nn.DataParallel(model)
     else:
-        model = globals()[f'VOneNet'](model_arch=model_arch, **kwargs)
+        model = globals()[f'VOneNet'](controlled_params=controlled_params, model_arch=model_arch, **kwargs)
         model = nn.DataParallel(model)
 
     model.to(map_location)

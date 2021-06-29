@@ -1,6 +1,6 @@
 
 import numpy as np
-from .utils import sample_dist
+from vonenet.utils import sample_dist
 import scipy.stats as stats
 
 
@@ -98,3 +98,33 @@ def generate_gabor_param(features, seed=0, rand_flag=False, sf_corr=0, sf_max=9,
         sf = 2**sf
 
     return sf, ori, phase, nx, ny
+
+
+def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amount=8):
+    orientations = [(180/ori_amount) * float(val) for val in list(range(0,ori_amount))]
+    ori_stride = orientations / 4 
+
+    orientations = orientations * int((features / len(orientations)))
+
+    # phases are not important for the selectivity I guess?
+    phase_bins = np.array([0, 360])
+    phase_dist = np.array([1])
+    phase = sample_dist(phase_dist, phase_bins, features)
+    
+    sf_steps = np.linspace(0.1,6.0, 512/ori_amount)
+
+    sf    = [0.] * int(features)
+    nx    = [0.] * int(features)
+    ny    = [0.] * int(features)
+
+    # create parameters in specific order for each orientation bin
+    j = 0 
+    for i in range(features):
+        sf[i] = sf_steps[j]
+        nx[i] = nx_steps[j]
+        ny[i] = ny_steps[j]
+        # every ori_amounts change of frequency etc
+        if i+1 % ori_amount == 0:
+            j +=1 
+
+    return ori_stride, orientations, phase, nx, ny

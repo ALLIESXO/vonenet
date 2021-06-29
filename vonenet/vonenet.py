@@ -1,21 +1,23 @@
 
 from collections import OrderedDict
 from torch import nn
-from .modules import VOneBlock
-from .back_ends import ResNetBackEnd, Bottleneck, AlexNetBackEnd, CORnetSBackEnd
-from .params import generate_gabor_param
+from vonenet.modules import VOneBlock
+from vonenet.back_ends import ResNetBackEnd, Bottleneck, AlexNetBackEnd, CORnetSBackEnd
+from vonenet.params import generate_gabor_param, generate_controlled_gabor_param
 import numpy as np
 
 
 def VOneNet(sf_corr=0.75, sf_max=6, sf_min=0, rand_param=False, gabor_seed=0,
             simple_channels=256, complex_channels=256,
             noise_mode='neuronal', noise_scale=0.35, noise_level=0.07, k_exc=25,
-            model_arch='resnet50', image_size=224, visual_degrees=8, ksize=25, stride=4):
+            model_arch='resnet50', image_size=224, visual_degrees=8, ksize=25, stride=4, controlled_params=False):
 
 
     out_channels = simple_channels + complex_channels
 
     sf, theta, phase, nx, ny = generate_gabor_param(out_channels, gabor_seed, rand_param, sf_corr, sf_max, sf_min)
+    if controlled_params:
+        orhtognal_stride, sf, theta, phase, nx, ny = generate_controlled_gabor_param(out_channels, sf_corr, sf_max, sf_min)
 
     gabor_params = {'simple_channels': simple_channels, 'complex_channels': complex_channels, 'rand_param': rand_param,
                     'gabor_seed': gabor_seed, 'sf_max': sf_max, 'sf_corr': sf_corr, 'sf': sf.copy(),

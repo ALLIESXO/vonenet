@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-from .utils import gabor_kernel
+from vonenet.utils import gabor_kernel
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -63,9 +63,9 @@ class VOneBlock(nn.Module):
         self.simple_conv_q0 = GFB(self.in_channels, self.out_channels, ksize, stride)
         self.simple_conv_q1 = GFB(self.in_channels, self.out_channels, ksize, stride)
         self.simple_conv_q0.initialize(sf=self.sf, theta=self.theta, sigx=self.sigx, sigy=self.sigy,
-                                       phase=self.phase)
+                                       phase=self.phase) # simple cells
         self.simple_conv_q1.initialize(sf=self.sf, theta=self.theta, sigx=self.sigx, sigy=self.sigy,
-                                       phase=self.phase + np.pi / 2)
+                                       phase=self.phase + np.pi / 2) # complex cells 
 
         self.simple = nn.ReLU(inplace=True)
         self.complex = Identity()
