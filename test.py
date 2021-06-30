@@ -10,7 +10,7 @@ voneblock = model.module
 def torchNormalize(t):
     return (t - t.min()) / (t.max() - t.min())
 
-image = Image.open("/home/alexander/Downloads/imagenet2012/ILSVRC2012_val_00000003.JPEG")
+image = Image.open("R:/Datasets/ILSVRC2012_img_val/ILSVRC2012_val_00000003.JPEG")
 
 transforms = torchvision.transforms.Compose([
     torchvision.transforms.Resize(256),
@@ -31,9 +31,9 @@ normalized_result = (result - result.min()) / (result.max() - result.min())
 
 for i in range(512):
     filt = torchvision.transforms.ToPILImage()(normalized_result[i])
-    filt.save(f"filter{i}.png", format="png")
-print("test")
+    filt.save(f"./filter_outputs/filter{i}.png", format="png")
+    kernel = voneblock.simple_conv_q0.weight.data[i]
+    kernel = torchNormalize(kernel)
+    torchvision.transforms.ToPILImage()(kernel).save(f"./kernels/kernel{i}.png", format="png")
 
-first_kernel = voneblock.simple_conv_q0.weight.data[500]
-first_kernel = torchNormalize(first_kernel)
-torchvision.transforms.ToPILImage()(first_kernel).save("kernel0.png", format="png")
+print("Done!")

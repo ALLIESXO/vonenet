@@ -102,7 +102,7 @@ def generate_gabor_param(features, seed=0, rand_flag=False, sf_corr=0, sf_max=9,
 
 def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amount=8):
     orientations = [(180/ori_amount) * float(val) for val in list(range(0,ori_amount))]
-    ori_stride = orientations / 4 
+    ori_stride = len(orientations) / 4 
 
     orientations = orientations * int((features / len(orientations)))
 
@@ -110,21 +110,48 @@ def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amoun
     phase_bins = np.array([0, 360])
     phase_dist = np.array([1])
     phase = sample_dist(phase_dist, phase_bins, features)
-    
-    sf_steps = np.linspace(0.1,6.0, 512/ori_amount)
+
+    # nx ny - TODO check if ok 
+    # Schiller 1976
+    cov_mat = np.array([[1, sf_corr], [sf_corr, 1]])
+
+    # Ringach 2002b
+    nx_bins = np.logspace(-1, 0.2, 6, base=10)
+    ny_bins = np.logspace(-1, 0.2, 6, base=10)
+    n_joint_dist = np.array([[2.,  0.,  1.,  0.,  0.],
+                                 [8.,  9.,  4.,  1.,  0.],
+                                 [1.,  2., 19., 17.,  3.],
+                                 [0.,  0.,  1.,  7.,  4.],
+                                 [0.,  0.,  0.,  0.,  0.]])
+    n_joint_dist = n_joint_dist / n_joint_dist.sum()
+    nx_dist = n_joint_dist.sum(axis=1)
+    nx_dist = nx_dist / nx_dist.sum()
+    ny_dist_marg = n_joint_dist / n_joint_dist.sum(axis=1, keepdims=True)
+
+
+    samps = np.random.multivariate_normal([0, 0], cov_mat, features)
+    samps_cdf = stats.norm.cdf(samps)
+    nx = np.interp(samps_cdf[:,0], np.hstack(([0], nx_dist.cumsum())), np.log10(nx_bins))
+    nx = 10**nx
+
+    ny_samp = np.random.rand(features)
+    ny = np.zeros(features)
+    for samp_ind, nx_samp in enumerate(nx):
+        bin_id = np.argwhere(nx_bins < nx_samp)[-1]
+        ny[samp_ind] = np.interp(ny_samp[samp_ind],
+        np.hstack(([0], ny_dist_marg[bin_id, :].cumsum())), np.log10(ny_bins))
+    ny = 10**ny
+
+    sf_steps = np.linspace((sf_min + 0.1),sf_max, int(512/ori_amount))
 
     sf    = [0.] * int(features)
-    nx    = [0.] * int(features)
-    ny    = [0.] * int(features)
 
     # create parameters in specific order for each orientation bin
     j = 0 
     for i in range(features):
         sf[i] = sf_steps[j]
-        nx[i] = nx_steps[j]
-        ny[i] = ny_steps[j]
         # every ori_amounts change of frequency etc
-        if i+1 % ori_amount == 0:
+        if (i+1) % ori_amount == 0:
             j +=1 
 
-    return ori_stride, orientations, phase, nx, ny
+    return ori_stride, np.array(sf), np.array(orientations), np.array(phase), np.array(nx), np.array(ny)

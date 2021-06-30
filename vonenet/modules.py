@@ -39,7 +39,7 @@ class GFB(nn.Module):
 class VOneBlock(nn.Module):
     def __init__(self, sf, theta, sigx, sigy, phase,
                  k_exc=25, noise_mode=None, noise_scale=1, noise_level=1,
-                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224):
+                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=4):
         super().__init__()
 
         self.in_channels = 3
@@ -49,6 +49,7 @@ class VOneBlock(nn.Module):
         self.out_channels = simple_channels + complex_channels
         self.stride = stride
         self.input_size = input_size
+        self.long_range_interaction = []
 
         self.sf = sf
         self.theta = theta
@@ -71,6 +72,9 @@ class VOneBlock(nn.Module):
         self.complex = Identity()
         self.gabors = Identity()
         self.noise = nn.ReLU(inplace=True)
+        
+
+
         self.output = Identity()
 
     def forward(self, x):
