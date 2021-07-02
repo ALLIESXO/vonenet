@@ -37,7 +37,7 @@ class GFB(nn.Module):
 
 
 class VOneBlock(nn.Module):
-    def __init__(self, sf, theta, sigx, sigy, phase,
+    def __init__(self, sf, theta, sigx, sigy, phase, ori_stride,
                  k_exc=25, noise_mode=None, noise_scale=1, noise_level=1,
                  simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=4):
         super().__init__()
@@ -60,6 +60,7 @@ class VOneBlock(nn.Module):
 
         self.set_noise_mode(noise_mode, noise_scale, noise_level)
         self.fixed_noise = None
+        self.long_range_feedback = None
 
         self.simple_conv_q0 = GFB(self.in_channels, self.out_channels, ksize, stride)
         self.simple_conv_q1 = GFB(self.in_channels, self.out_channels, ksize, stride)
@@ -73,7 +74,11 @@ class VOneBlock(nn.Module):
         self.gabors = Identity()
         self.noise = nn.ReLU(inplace=True)
         
-
+        
+        # TODO: delete temp layer
+        self.temp_combination = CombinationLayer()
+        for i in range(long_range_iterations):
+            pass # TODO enroll combination stage layers and long range interaction 
 
         self.output = Identity()
 
@@ -84,6 +89,9 @@ class VOneBlock(nn.Module):
         x = self.noise_f(x)
         # V1 Block output: (Batch, out_channels, H/stride, W/stride)
         x = self.output(x)
+
+        x = self.temp_combination(x, self.long_range_feedback)
+
         return x
 
     def gabors_f(self, x):
@@ -128,3 +136,50 @@ class VOneBlock(nn.Module):
 
     def unfix_noise(self):
         self.fixed_noise = None
+
+
+class CombinationLayer(nn.Module):
+    """
+    At the combination stage, feedforward complex cellresponsesCEand feedback
+    long-range responses WE are added and subject to “shunting interaction,”
+    i.e., a non-linear compression of high amplitude activity following the 
+    Weber–Fechner law.
+    """
+    def __init__(self):
+        super().__init__()
+
+        # params from Hansen, Neumann paper
+        self.delta_v = 2.0
+        self.alpha_v = 0.2
+        self.beta_v  = 10.0
+
+    def forward(self, x, long_range_feedback):
+        
+        # first iteration W_theta is set to C_theta
+        if long_range_feedback is None:
+            w_theta = x
+        
+        net_theta = x + (self.delta_v * x)
+
+        return self.beta_v * (net_theta/(self.alpha_v + net_theta))
+
+
+class LongRangeLayer(nn.Module):
+    def __init__(self,orientation_stride, phi, radii=20):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.ori_stride = orientation_stride
+        
+        self.alpha = 20 # 20 degrees  
+        self.std = 3 # std of the gaussian
+        self.r_max = 25 
+        self.B_ang = lambda theta, phi: np.cos(((2*np.pi)/2*np.deg2rad(alpha)*(theta - phi))) if np.abs(phi - theta) <= (np.deg2rad(alpha)/2.0) else 0
+        self.B_rad = lambda r: np.exp(-(r**2)/2*self.std) if r > self.r_max else 1
+        self.B_theta = lambda theta, phi, rad: self.B_ang(theta, phi) * self.B_rad(rad)
+        
+
+
+    def forward(self, x):
+        pass # TODO
+

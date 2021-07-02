@@ -14,10 +14,11 @@ def VOneNet(sf_corr=0.75, sf_max=6, sf_min=0, rand_param=False, gabor_seed=0,
 
 
     out_channels = simple_channels + complex_channels
+    orientation_stride = 0
 
     sf, theta, phase, nx, ny = generate_gabor_param(out_channels, gabor_seed, rand_param, sf_corr, sf_max, sf_min)
     if controlled_params:
-        orhtognal_stride, sf, theta, phase, nx, ny = generate_controlled_gabor_param(out_channels, sf_corr, sf_max, sf_min)
+        orientation_stride, sf, theta, phase, nx, ny = generate_controlled_gabor_param(out_channels, sf_corr, sf_max, sf_min)
 
     gabor_params = {'simple_channels': simple_channels, 'complex_channels': complex_channels, 'rand_param': rand_param,
                     'gabor_seed': gabor_seed, 'sf_max': sf_max, 'sf_corr': sf_corr, 'sf': sf.copy(),
@@ -34,7 +35,7 @@ def VOneNet(sf_corr=0.75, sf_max=6, sf_min=0, rand_param=False, gabor_seed=0,
     theta = theta/180 * np.pi
     phase = phase / 180 * np.pi
 
-    vone_block = VOneBlock(sf=sf, theta=theta, sigx=sigx, sigy=sigy, phase=phase,
+    vone_block = VOneBlock(sf=sf, theta=theta, sigx=sigx, sigy=sigy, phase=phase, ori_stride=orientation_stride, 
                            k_exc=k_exc, noise_mode=noise_mode, noise_scale=noise_scale, noise_level=noise_level,
                            simple_channels=simple_channels, complex_channels=complex_channels,
                            ksize=ksize, stride=stride, input_size=image_size)
