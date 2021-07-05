@@ -4,6 +4,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from vonenet.utils import gabor_kernel
+from vonenet.long_range_filter import create_long_range_filter
+#import kornia.filters.gaussian_blur2d
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -77,8 +79,11 @@ class VOneBlock(nn.Module):
         
         # TODO: delete temp layer
         self.temp_combination = CombinationLayer()
+        self.temp_lrinteraction = LongRangeLayer(self.theta[:ori_stride])
+        """"
         for i in range(long_range_iterations):
             pass # TODO enroll combination stage layers and long range interaction 
+        """
 
         self.output = Identity()
 
@@ -91,6 +96,7 @@ class VOneBlock(nn.Module):
         x = self.output(x)
 
         x = self.temp_combination(x, self.long_range_feedback)
+        x = self.temp_lrinteraction(x)
 
         return x
 
@@ -165,21 +171,40 @@ class CombinationLayer(nn.Module):
 
 
 class LongRangeLayer(nn.Module):
-    def __init__(self,orientation_stride, phi, radii=20):
+    def __init__(self, orientations, ksize=50, std=3, r_max=25, alpha=20):
         super().__init__()
-        self.in_channels = in_channels
-        self.out_channels = out_channels
-        self.ori_stride = orientation_stride
-        
-        self.alpha = 20 # 20 degrees  
-        self.std = 3 # std of the gaussian
-        self.r_max = 25 
-        self.B_ang = lambda theta, phi: np.cos(((2*np.pi)/2*np.deg2rad(alpha)*(theta - phi))) if np.abs(phi - theta) <= (np.deg2rad(alpha)/2.0) else 0
-        self.B_rad = lambda r: np.exp(-(r**2)/2*self.std) if r > self.r_max else 1
-        self.B_theta = lambda theta, phi, rad: self.B_ang(theta, phi) * self.B_rad(rad)
-        
+        self.alpha = 20.0 # degrees
+        self.std = 3.0 # std of the gaussian
+        self.r_max = 25.0 # maximum 
+        self.kernel_size = ksize
+        self.ori_stride = len(orientations)
+        self.lrfilter = []
+        for ori in orientations:
+            self.lrfilter.append(create_long_range_filter(ori,ksize,std,r_max,alpha))
 
 
     def forward(self, x):
-        pass # TODO
+        # parameters form Hansen, Neumann paper
+        a_w = 0.2 # decay
+        # scale factors 
+        eta_p = 5.0
+        eta_m = 2.0
 
+        # excitatory input is provided by correlation of input and long range filter of same orientation
+        netp = x.copy()
+        netm = x.copy()
+        orth_step = int(self.ori_stride/4) 
+        for i in range(0,len(x),self.ori_stride):
+            for j in range(len(orientations)):
+                pass # TODO fix 
+                """
+                if j < len(orientations)/2:
+                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride])
+                    netp[i+j] = F.conv2d(F.ReLU((netp[i+j] - netp[i+j+orth_step])),
+                    # Filter input, params)
+                else:
+                    netp[i+j] = F.ReLU(netp[i+j] - netp[i+j-orth_step])
+                
+                # inhibitory effect
+                netm[i] = F.conv2d(F.conv2d(netp[i], gauss_ori),gauss_neighbor) # TODO: create gauss_ori and gauss_neighbor
+                """
