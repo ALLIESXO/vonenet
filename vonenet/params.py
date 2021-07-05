@@ -111,7 +111,6 @@ def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amoun
     phase_dist = np.array([1])
     phase = sample_dist(phase_dist, phase_bins, features)
 
-    # nx ny - TODO check if ok 
     # Schiller 1976
     cov_mat = np.array([[1, sf_corr], [sf_corr, 1]])
 
@@ -128,7 +127,6 @@ def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amoun
     nx_dist = nx_dist / nx_dist.sum()
     ny_dist_marg = n_joint_dist / n_joint_dist.sum(axis=1, keepdims=True)
 
-
     samps = np.random.multivariate_normal([0, 0], cov_mat, features)
     samps_cdf = stats.norm.cdf(samps)
     nx = np.interp(samps_cdf[:,0], np.hstack(([0], nx_dist.cumsum())), np.log10(nx_bins))
@@ -142,16 +140,26 @@ def generate_controlled_gabor_param(features, sf_corr, sf_max, sf_min, ori_amoun
         np.hstack(([0], ny_dist_marg[bin_id, :].cumsum())), np.log10(ny_bins))
     ny = 10**ny
 
-    sf_steps = np.linspace((sf_min + 0.1),sf_max, int(512/ori_amount))
+    sf_steps = np.linspace((sf_min + 0.7),sf_max, int(512/ori_amount))
 
     sf    = [0.] * int(features)
 
     # create parameters in specific order for each orientation bin
-    j = 0 
+    j = 0
+
+    nx[np.where(nx > 0.9)] *= np.random.rand(1)[0]
+    ny[np.where(nx > 0.9)] *= np.random.rand(1)[0]
+    randx = np.random.randint(512, size=int(features/ori_amount))
+    randy = np.random.randint(512, size=int(features/ori_amount)) 
+    nx_strided = np.zeros(features)
+    ny_strided = np.zeros(features)
+
     for i in range(features):
         sf[i] = sf_steps[j]
+        nx_strided[i] = nx[int(randx[j])]
+        ny_strided[i] = ny[int(randy[j])]
         # every ori_amounts change of frequency etc
         if (i+1) % ori_amount == 0:
             j +=1 
 
-    return ori_stride, np.array(sf), np.array(orientations), np.array(phase), np.array(nx), np.array(ny)
+    return ori_stride, np.array(sf), np.array(orientations), np.array(phase), np.array(nx_strided), np.array(ny_strided)
