@@ -4,6 +4,11 @@ import pandas as pd
 import numpy as np
 import tqdm
 import fire
+import torch
+import torch.nn as nn
+import torch.utils.model_zoo
+import torchvision
+from vonenet import get_model
 
 parser = argparse.ArgumentParser(description='ImageNet Training')
 ## General parameters
@@ -15,21 +20,21 @@ parser.add_argument('-restore_epoch', '--restore_epoch', default=0, type=int,
                     help='epoch number for restoring model training ')
 
 ## Training parameters
-parser.add_argument('--ngpus', default=0, type=int,
+parser.add_argument('--ngpus', default=1, type=int,
                     help='number of GPUs to use; 0 if you want to run on CPU')
-parser.add_argument('-j', '--workers', default=20, type=int,
+parser.add_argument('-j', '--workers', default=4, type=int,
                     help='number of data loading workers')
 parser.add_argument('--epochs', default=70, type=int,
                     help='number of total epochs to run')
-parser.add_argument('--batch_size', default=256, type=int,
+parser.add_argument('--batch_size', default=32, type=int,
                     help='mini-batch size')
 parser.add_argument('--optimizer', choices=['stepLR', 'plateauLR'], default='stepLR',
                     help='Optimizer')
-parser.add_argument('--lr', '--learning_rate', default=.1, type=float,
+parser.add_argument('--lr', '--learning_rate', default=.005, type=float,
                     help='initial learning rate')
-parser.add_argument('--step_size', default=20, type=int,
+parser.add_argument('--step_size', default=10, type=int,
                     help='after how many epochs learning rate should be decreased by step_factor')
-parser.add_argument('--step_factor', default=0.1, type=float,
+parser.add_argument('--step_factor', default=0.5, type=float,
                     help='factor by which to decrease the learning rate')
 parser.add_argument('--momentum', default=.9, type=float, help='momentum')
 parser.add_argument('--weight_decay', default=1e-4, type=float,
@@ -91,7 +96,7 @@ def set_gpus(n=2):
             'nvidia-smi --query-gpu=index,memory.free,memory.total --format=csv,nounits'), check=True,
             stdout=subprocess.PIPE).stdout
         gpus = pd.read_csv(io.BytesIO(gpus), sep=', ', engine='python')
-        gpus = gpus[gpus['memory.total [MiB]'] > 10000]  # only above 10 GB
+        gpus = gpus[gpus['memory.total [MiB]'] > 5000]  # only above 5 GB
         if os.environ.get('CUDA_VISIBLE_DEVICES') is not None:
             visible = [int(i)
                        for i in os.environ['CUDA_VISIBLE_DEVICES'].split(',')]
@@ -106,12 +111,6 @@ def set_gpus(n=2):
 
 if FLAGS.ngpus > 0:
     set_gpus(FLAGS.ngpus)
-
-import torch
-import torch.nn as nn
-import torch.utils.model_zoo
-import torchvision
-from vonenet import get_model
 
 torch.manual_seed(FLAGS.torch_seed)
 
@@ -133,7 +132,7 @@ elif FLAGS.normalization == 'imagenet':
 def load_model():
     map_location = None if FLAGS.ngpus > 0 else 'cpu'
     print('Getting VOneNet')
-    model = get_model(map_location=map_location, model_arch=FLAGS.model_arch, pretrained=False,
+    model = get_model(map_location=map_location, model_arch=FLAGS.model_arch, pretrained=False,controlled_params=True,
                       visual_degrees=FLAGS.visual_degrees, stride=FLAGS.stride, ksize=FLAGS.ksize,
                       sf_corr=FLAGS.sf_corr, sf_max=FLAGS.sf_max, sf_min=FLAGS.sf_min, rand_param=FLAGS.rand_param,
                       gabor_seed=FLAGS.gabor_seed, simple_channels=FLAGS.simple_channels,
