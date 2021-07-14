@@ -53,6 +53,9 @@ class VOneBlock(nn.Module):
         self.input_size = input_size
         self.long_range_iterations = long_range_iterations
 
+        # intermediate representations for testing
+        self.v1_response = None
+
         self.sf = sf
         self.theta = theta
         self.sigx = sigx
@@ -85,6 +88,7 @@ class VOneBlock(nn.Module):
     def forward(self, x):
         # Gabor activations [Batch, out_channels, H/stride, W/stride]
         x = self.gabors_f(x)
+        self.v1_response = x
         # Noise [Batch, out_channels, H/stride, W/stride]
         x = self.noise_f(x)
         # V1 Block output: (Batch, out_channels, H/stride, W/stride)
@@ -94,6 +98,7 @@ class VOneBlock(nn.Module):
             x = self.combination(x, self.long_range_feedback)
             self.long_range_feedback = self.lrinteraction(x)
 
+        x = self.combination(x, self.long_range_feedback)
         x = F.instance_norm(x)
 
         return x
@@ -192,24 +197,23 @@ class LongRangeLayer(nn.Module):
         eta_m = 2.0
         beta_w = 0.001
 
-        x = x[0]
         w_theta = x.clone()
         netp = x.clone() # maybe .detach().clone()
         netm = x.clone()
         orth_step = int(self.ori_stride/4)
         # excitatory input is provided by correlation of input and long range filter of same orientation
-        for i in range(0,len(x),self.ori_stride):
+        for i in range(0,x.shape[1],self.ori_stride):
             for j in range(self.ori_stride):
                 if j < self.ori_stride/2:
                     weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
-                    vals = F.relu((netp[i+j] - netp[i+j+orth_step])).unsqueeze(0).unsqueeze(0)
+                    vals = F.relu((netp[:,i+j] - netp[:,i+j+orth_step])).unsqueeze(1)
                     vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
-                    netp[i+j] = F.conv2d(vals_padded, weights, stride=1)
+                    netp[:,i+j] = F.conv2d(vals_padded, weights, stride=1)
                 else:
                     weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
-                    vals = F.relu(netp[i+j] - netp[i+j-orth_step]).unsqueeze(0).unsqueeze(0)
+                    vals = F.relu(netp[:,i+j] - netp[:,i+j-orth_step]).unsqueeze(1)
                     vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
-                    netp[i+j] = F.conv2d(vals_padded, weights, stride=1)
+                    netp[:,i+j] = F.conv2d(vals_padded, weights, stride=1)
 
         # inhibitory effect by sampling of activity with isotropic gaussians
         for i in range(x.shape[1]):
@@ -221,11 +225,11 @@ class LongRangeLayer(nn.Module):
 
                 # variant where we run gaussian over every orientation 
                 for k in range(int(len(x)/self.ori_stride)):
-                    netm[(k*8):(k+1)*8,i,j] = torch.from_numpy(gaussian_filter(netp[(k*8):(k+1)*8,i,j], 0.5))
+                    netm[:,(k*8):(k+1)*8,i,j] = torch.from_numpy(gaussian_filter(netp[:,(k*8):(k+1)*8,i,j], 0.5))
         
         # spatial gaussian with sigma 8 
-        for i in range(len(x)):
-            netm[i] = torch.from_numpy(gaussian_filter(netm[i], 8.0))
+        for i in range(x.shape[1]):
+            netm[:,i] = torch.from_numpy(gaussian_filter(netm[:,i], 8.0))
         
         return beta_w * (x * (1 + eta_p * netp)/(a_w + eta_m * netm))
         

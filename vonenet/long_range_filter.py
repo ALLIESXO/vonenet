@@ -45,7 +45,7 @@ def create_long_range_filter(orientation, ksize, alpha, std, r_max):
             filt2 = np.flip(filt)
             filt = np.maximum(filt, filt2)
             
-    filt = filt / filt.max()
+    filt = filt / filt.sum()
     return filt.astype(float)
 
 """
