@@ -5,7 +5,7 @@ from torch import nn
 from torch.nn import functional as F
 from vonenet.utils import gabor_kernel
 from vonenet.long_range_filter import create_long_range_filter
-#import kornia.filters.gaussian_blur2d
+from scipy.ndimage import gaussian_filter
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,7 +51,7 @@ class VOneBlock(nn.Module):
         self.out_channels = simple_channels + complex_channels
         self.stride = stride
         self.input_size = input_size
-        self.long_range_interaction = []
+        self.long_range_iterations = long_range_iterations
 
         self.sf = sf
         self.theta = theta
@@ -77,13 +77,8 @@ class VOneBlock(nn.Module):
         self.noise = nn.ReLU(inplace=True)
         
         
-        # TODO: delete temp layer
-        self.temp_combination = CombinationLayer()
-        self.temp_lrinteraction = LongRangeLayer(self.theta[:ori_stride])
-        """"
-        for i in range(long_range_iterations):
-            pass # TODO enroll combination stage layers and long range interaction 
-        """
+        self.combination = CombinationLayer()
+        self.lrinteraction = LongRangeLayer(self.theta[:(int(ori_stride)*4)])
 
         self.output = Identity()
 
@@ -95,8 +90,11 @@ class VOneBlock(nn.Module):
         # V1 Block output: (Batch, out_channels, H/stride, W/stride)
         x = self.output(x)
 
-        x = self.temp_combination(x, self.long_range_feedback)
-        x = self.temp_lrinteraction(x)
+        for i in range(self.long_range_iterations):
+            x = self.combination(x, self.long_range_feedback)
+            self.long_range_feedback = self.lrinteraction(x)
+
+        x = F.instance_norm(x)
 
         return x
 
@@ -164,23 +162,26 @@ class CombinationLayer(nn.Module):
         # first iteration W_theta is set to C_theta
         if long_range_feedback is None:
             w_theta = x
-        
-        net_theta = x + (self.delta_v * x)
+        else:
+            w_theta = long_range_feedback
 
-        return self.beta_v * (net_theta/(self.alpha_v + net_theta))
+        net_theta = x + (self.delta_v * w_theta)
+        result = self.beta_v * (net_theta/(self.alpha_v + net_theta))
+        return result
 
+from PIL import Image
 
 class LongRangeLayer(nn.Module):
-    def __init__(self, orientations, ksize=50, std=3, r_max=25, alpha=20):
+    def __init__(self, orientations, ksize=16, std=3, r_max=5, alpha=20):
         super().__init__()
-        self.alpha = 20.0 # degrees
-        self.std = 3.0 # std of the gaussian
-        self.r_max = 25.0 # maximum 
+        self.alpha = alpha # degrees
+        self.std = std # std of the gaussian
+        self.r_max = r_max # maximum 
         self.kernel_size = ksize
         self.ori_stride = len(orientations)
         self.lrfilter = []
         for ori in orientations:
-            self.lrfilter.append(create_long_range_filter(ori,ksize,std,r_max,alpha))
+            self.lrfilter.append(create_long_range_filter(ori,ksize,alpha,std,r_max))
 
 
     def forward(self, x):
@@ -189,22 +190,42 @@ class LongRangeLayer(nn.Module):
         # scale factors 
         eta_p = 5.0
         eta_m = 2.0
+        beta_w = 0.001
 
+        x = x[0]
+        w_theta = x.clone()
+        netp = x.clone() # maybe .detach().clone()
+        netm = x.clone()
+        orth_step = int(self.ori_stride/4)
         # excitatory input is provided by correlation of input and long range filter of same orientation
-        netp = x.copy()
-        netm = x.copy()
-        orth_step = int(self.ori_stride/4) 
         for i in range(0,len(x),self.ori_stride):
-            for j in range(len(orientations)):
-                pass # TODO fix 
-                """
-                if j < len(orientations)/2:
-                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride])
-                    netp[i+j] = F.conv2d(F.ReLU((netp[i+j] - netp[i+j+orth_step])),
-                    # Filter input, params)
+            for j in range(self.ori_stride):
+                if j < self.ori_stride/2:
+                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
+                    vals = F.relu((netp[i+j] - netp[i+j+orth_step])).unsqueeze(0).unsqueeze(0)
+                    vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
+                    netp[i+j] = F.conv2d(vals_padded, weights, stride=1)
                 else:
-                    netp[i+j] = F.ReLU(netp[i+j] - netp[i+j-orth_step])
-                
-                # inhibitory effect
-                netm[i] = F.conv2d(F.conv2d(netp[i], gauss_ori),gauss_neighbor) # TODO: create gauss_ori and gauss_neighbor
-                """
+                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
+                    vals = F.relu(netp[i+j] - netp[i+j-orth_step]).unsqueeze(0).unsqueeze(0)
+                    vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
+                    netp[i+j] = F.conv2d(vals_padded, weights, stride=1)
+
+        # inhibitory effect by sampling of activity with isotropic gaussians
+        for i in range(x.shape[1]):
+            for j in range(x.shape[2]):
+                ### 1d conv with features isotropic gaussian from orientational
+
+                # this variant runs the gaussian over all sizes and phases 
+                # netm[:,i,j] = torch.from_numpy(gaussian_filter(netp[:,i,j], 0.5))
+
+                # variant where we run gaussian over every orientation 
+                for k in range(int(len(x)/self.ori_stride)):
+                    netm[(k*8):(k+1)*8,i,j] = torch.from_numpy(gaussian_filter(netp[(k*8):(k+1)*8,i,j], 0.5))
+        
+        # spatial gaussian with sigma 8 
+        for i in range(len(x)):
+            netm[i] = torch.from_numpy(gaussian_filter(netm[i], 8.0))
+        
+        return beta_w * (x * (1 + eta_p * netp)/(a_w + eta_m * netm))
+        

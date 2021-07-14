@@ -18,7 +18,7 @@ def VOneNet(sf_corr=0.75, sf_max=6, sf_min=0, rand_param=False, gabor_seed=0,
 
     sf, theta, phase, nx, ny = generate_gabor_param(out_channels, gabor_seed, rand_param, sf_corr, sf_max, sf_min)
     if controlled_params:
-        orientation_stride, sf, theta, phase, nx, ny = generate_controlled_gabor_param(out_channels, sf_corr, sf_max, sf_min)
+        orientation_stride, sf, theta, phase, nx, ny = generate_controlled_gabor_param(out_channels, sf_corr, sf_max, sf_min, ori_amount=8)
 
     gabor_params = {'simple_channels': simple_channels, 'complex_channels': complex_channels, 'rand_param': rand_param,
                     'gabor_seed': gabor_seed, 'sf_max': sf_max, 'sf_corr': sf_corr, 'sf': sf.copy(),

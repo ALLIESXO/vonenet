@@ -46,11 +46,11 @@ def create_long_range_filter(orientation, ksize, alpha, std, r_max):
             filt = np.maximum(filt, filt2)
             
     filt = filt / filt.max()
-    return filt
+    return filt.astype(float)
 
 """
-for deg in range(0,190,10):
-    filt1 = create_long_range_filter(deg, alpha, std, r_max)
+for deg in range(0,90, 180.0/8.0):
+    filt1 = create_long_range_filter(deg, 11, alpha, std, 3)
     img = Image.fromarray((filt1*255).astype(np.uint8))
     img.save(f"long_range_filter/degree_{deg}.png")
-""" 
+"""
