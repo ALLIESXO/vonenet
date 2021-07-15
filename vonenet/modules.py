@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import kornia
 from torch import nn
+from torch._C import long
 from torch.nn import functional as F
 from vonenet.utils import gabor_kernel
 from vonenet.long_range_filter import create_long_range_filter
@@ -101,6 +102,8 @@ class VOneBlock(nn.Module):
 
         x = self.combination(x, self.long_range_feedback)
         x = F.instance_norm(x)
+
+        self.long_range_feedback = None # reset after every iteration 
 
         return x
 
