@@ -1,6 +1,7 @@
 
 import numpy as np
 import torch
+import kornia
 from torch import nn
 from torch.nn import functional as F
 from vonenet.utils import gabor_kernel
@@ -197,6 +198,9 @@ class LongRangeLayer(nn.Module):
         eta_m = 2.0
         beta_w = 0.001
 
+        gauss_surround = kornia.filters.GaussianBlur2d((7,7), (8.0,8.0))
+        gauss_center = kornia.filters.get_gaussian_kernel1d(5, 0.5).unsqueeze(0).unsqueeze(0)
+
         w_theta = x.clone()
         netp = x.clone() # maybe .detach().clone()
         netm = x.clone()
@@ -216,8 +220,8 @@ class LongRangeLayer(nn.Module):
                     netp[:,i+j] = F.conv2d(vals_padded, weights, stride=1).squeeze(1)
 
         # inhibitory effect by sampling of activity with isotropic gaussians
-        for i in range(x.shape[1]):
-            for j in range(x.shape[2]):
+        for i in range(x.shape[2]):
+            for j in range(x.shape[3]):
                 ### 1d conv with features isotropic gaussian from orientational
 
                 # this variant runs the gaussian over all sizes and phases 
@@ -226,12 +230,12 @@ class LongRangeLayer(nn.Module):
                 # variant where we run gaussian over every orientation 
                 for k in range(int(len(x)/self.ori_stride)):
                     #netm[:,(k*8):(k+1)*8,i,j] = torch.from_numpy(gaussian_filter(netp[:,(k*8):(k+1)*8,i,j], 0.5))
-                    pass
+                    netm[:,(k*8):(k+1)*8,i,j] = F.conv1d(netp[:,(k*8):(k+1)*8,i,j].unsqueeze(1), gauss_center.type(torch.cuda.FloatTensor), padding='same').squeeze(1)
         
         # spatial gaussian with sigma 8 
         for i in range(x.shape[1]):
             #netm[:,i] = torch.from_numpy(gaussian_filter(netm[:,i], 8.0))
-            pass
+            netm[:,i] = gauss_surround(netm[:,i].unsqueeze(1)).squeeze(1)
         
         return beta_w * (x * (1 + eta_p * netp)/(a_w + eta_m * netm))
         
