@@ -3,7 +3,6 @@ import numpy as np
 import torch
 import kornia
 from torch import nn
-from torch._C import long
 from torch.nn import functional as F
 from vonenet.utils import gabor_kernel
 from vonenet.long_range_filter import create_long_range_filter
@@ -90,11 +89,8 @@ class VOneBlock(nn.Module):
     def forward(self, x):
         # Gabor activations [Batch, out_channels, H/stride, W/stride]
         x = self.gabors_f(x)
-        self.v1_response = x
+        self.v1_response = x.detach().clone()
         # Noise [Batch, out_channels, H/stride, W/stride]
-        x = self.noise_f(x)
-        # V1 Block output: (Batch, out_channels, H/stride, W/stride)
-        x = self.output(x)
 
         for i in range(self.long_range_iterations):
             x = self.combination(x, self.long_range_feedback)
@@ -102,6 +98,12 @@ class VOneBlock(nn.Module):
 
         x = self.combination(x, self.long_range_feedback)
         x = F.instance_norm(x)
+        
+        self.v1_lr_response = x.detach().clone()
+
+        x = self.noise_f(x)
+        # V1 Block output: (Batch, out_channels, H/stride, W/stride)
+        x = self.output(x)
 
         self.long_range_feedback = None # reset after every iteration 
 
