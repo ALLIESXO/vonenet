@@ -18,6 +18,7 @@ parser.add_argument('-o', '--output_path', default=None,
                     help='path for storing ')
 parser.add_argument('-restore_epoch', '--restore_epoch', default=0, type=int,
                     help='epoch number for restoring model training ')
+parser.add_argument('-restore_path', '--restore_path', default=None, type=str)
 
 ## Training parameters
 parser.add_argument('--ngpus', default=1, type=int,
@@ -30,7 +31,7 @@ parser.add_argument('--batch_size', default=32, type=int,
                     help='mini-batch size')
 parser.add_argument('--optimizer', choices=['stepLR', 'plateauLR'], default='stepLR',
                     help='Optimizer')
-parser.add_argument('--lr', '--learning_rate', default=.005, type=float,
+parser.add_argument('--lr', '--learning_rate', default=.01, type=float,
                     help='initial learning rate')
 parser.add_argument('--step_size', default=10, type=int,
                     help='after how many epochs learning rate should be decreased by step_factor')
