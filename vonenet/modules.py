@@ -92,8 +92,8 @@ class VOneBlock(nn.Module):
         x = self.gabors_f(x)
         self.v1_response = x.detach().clone()
         # Noise [Batch, out_channels, H/stride, W/stride]
+        """
         iter = 0 
-        
         for i in range(self.long_range_iterations):
             ######## TODO: Remove following test chunk of code
             image = x[0].clone().detach()
@@ -113,7 +113,8 @@ class VOneBlock(nn.Module):
             x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
             self.long_range_feedback = self.lrinteraction(x[:,256:])
             iter += 1
-
+        """
+        
         x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
         x = F.instance_norm(x)
         
