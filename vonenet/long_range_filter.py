@@ -1,10 +1,6 @@
 import numpy as np 
 from PIL import Image
 
-#alpha = 35
-#std = 5
-#r_max = 25
-
 def deg_distance(alpha, beta):
         degrees = np.abs(beta-alpha)
         return degrees if degrees <= 180 else degrees - 360
@@ -32,14 +28,17 @@ def create_long_range_filter(orientation, ksize, alpha, std, r_max):
             
             r = np.hypot(x_pos, y_pos)
             
-            if r < 1:
-                filt[i,j] = 1
+            if r < 1.5 and np.abs(deg_distance(orientation, phi)) <= 40:
+                filt[i,j] = 1.0
             else:
                 phil[i,j] = (x_pos,y_pos, phi, r)
                 if orientation < 90:
                     filt[i,j] = np.abs(B_theta(orientation + 180, phi, r))
                 else:
                     filt[i,j] = np.abs(B_theta(orientation, phi, r))
+
+            if x_pos == 0 and y_pos == 0:
+                filt[i,j] = 1.0
 
             # combine both orientations
             filt2 = np.flip(filt)
@@ -48,9 +47,13 @@ def create_long_range_filter(orientation, ksize, alpha, std, r_max):
     filt = filt / filt.sum()
     return filt.astype(float)
 
-"""
-for deg in range(0,90, 180.0/8.0):
-    filt1 = create_long_range_filter(deg, 11, alpha, std, 3)
-    img = Image.fromarray((filt1*255).astype(np.uint8))
-    img.save(f"long_range_filter/degree_{deg}.png")
-"""
+
+if __name__ == '__main__':
+    degrees = [i*22.5 for i in range(8)]
+    for deg in degrees:
+        alpha = 30
+        std = 3
+        filt1 = create_long_range_filter(deg, 17, alpha, std, 4)
+        img = Image.fromarray((filt1*2550).astype(np.uint8))
+        #img = img.resize((17,17), Image.ANTIALIAS)
+        img.save(f"long_range_filter/degree_{deg}.png")

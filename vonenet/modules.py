@@ -1,6 +1,7 @@
 
 import numpy as np
 import torch
+import torchvision
 import kornia
 from torch import nn
 from torch.nn import functional as F
@@ -42,7 +43,7 @@ class GFB(nn.Module):
 class VOneBlock(nn.Module):
     def __init__(self, sf, theta, sigx, sigy, phase, ori_stride,
                  k_exc=25, noise_mode=None, noise_scale=1, noise_level=1,
-                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=4):
+                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=3):
         super().__init__()
 
         self.in_channels = 3
@@ -91,21 +92,38 @@ class VOneBlock(nn.Module):
         x = self.gabors_f(x)
         self.v1_response = x.detach().clone()
         # Noise [Batch, out_channels, H/stride, W/stride]
-
+        iter = 0 
+        
         for i in range(self.long_range_iterations):
-            x = self.combination(x, self.long_range_feedback)
-            self.long_range_feedback = self.lrinteraction(x)
+            ######## TODO: Remove following test chunk of code
+            image = x[0].clone().detach()
+            # 0 batch size 1 channels 2 height 3 width  
+            mean = image.mean(dim=(1,2)) + 0.00001
+            std = image.std(dim=(1,2))   + 0.00001
+            image = torchvision.transforms.Normalize(mean=mean,std=std)(image)
 
-        x = self.combination(x, self.long_range_feedback)
+            
+            if image.shape[0] > 3:
+                for k in range(image.shape[0]):
+                    torchvision.transforms.ToPILImage()(image[k]).save("/tmp/lr_checks/" + f"{k}.png")
+            else:
+                torchvision.transforms.ToPILImage()(image).save("/tmp/lr_checks/" + f"test.png")
+            ######## END of chunk 
+
+            x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
+            self.long_range_feedback = self.lrinteraction(x[:,256:])
+            iter += 1
+
+        x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
         x = F.instance_norm(x)
         
         self.v1_lr_response = x.detach().clone()
 
+        self.long_range_feedback = None # reset after every iteration 
+
         x = self.noise_f(x)
         # V1 Block output: (Batch, out_channels, H/stride, W/stride)
         x = self.output(x)
-
-        self.long_range_feedback = None # reset after every iteration 
 
         return x
 
@@ -172,9 +190,9 @@ class CombinationLayer(nn.Module):
         
         # first iteration W_theta is set to C_theta
         if long_range_feedback is None:
-            w_theta = x
+            w_theta = x.clone()
         else:
-            w_theta = long_range_feedback
+            w_theta = long_range_feedback.clone()
 
         net_theta = x + (self.delta_v * w_theta)
         result = self.beta_v * (net_theta/(self.alpha_v + net_theta))
@@ -183,7 +201,7 @@ class CombinationLayer(nn.Module):
 from PIL import Image
 
 class LongRangeLayer(nn.Module):
-    def __init__(self, orientations, ksize=16, std=3, r_max=5, alpha=20):
+    def __init__(self, orientations, ksize=17, std=3, r_max=4, alpha=25):
         super().__init__()
         self.alpha = alpha # degrees
         self.std = std # std of the gaussian
@@ -206,22 +224,22 @@ class LongRangeLayer(nn.Module):
         gauss_surround = kornia.filters.GaussianBlur2d((7,7), (8.0,8.0))
         gauss_center = kornia.filters.get_gaussian_kernel1d(5, 0.5).unsqueeze(0).unsqueeze(0)
 
-        w_theta = x.clone()
-        netp = x.clone() # maybe .detach().clone()
+        #w_theta = x.clone()
+        netp = x.clone() 
         netm = x.clone()
         orth_step = int(self.ori_stride/4)
         # excitatory input is provided by correlation of input and long range filter of same orientation
         for i in range(0,x.shape[1],self.ori_stride):
             for j in range(self.ori_stride):
                 if j < self.ori_stride/2:
-                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.cuda.FloatTensor).unsqueeze(0).unsqueeze(0)
+                    weights = torch.from_numpy(self.lrfilter[j]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
                     vals = F.relu((netp[:,i+j] - netp[:,i+j+orth_step])).unsqueeze(1)
-                    vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
+                    vals_padded = F.pad(vals, (8,8,8,8), mode="replicate")
                     netp[:,i+j] = F.conv2d(vals_padded, weights, stride=1).squeeze(1)
                 else:
-                    weights = torch.from_numpy(self.lrfilter[j%self.ori_stride]).type(torch.cuda.FloatTensor).unsqueeze(0).unsqueeze(0)
+                    weights = torch.from_numpy(self.lrfilter[j]).type(torch.FloatTensor).unsqueeze(0).unsqueeze(0)
                     vals = F.relu(netp[:,i+j] - netp[:,i+j-orth_step]).unsqueeze(1)
-                    vals_padded = F.pad(vals, (7,8,7,8), mode="replicate")
+                    vals_padded = F.pad(vals, (8,8,8,8), mode="replicate")
                     netp[:,i+j] = F.conv2d(vals_padded, weights, stride=1).squeeze(1)
 
         # inhibitory effect by sampling of activity with isotropic gaussians
@@ -233,14 +251,15 @@ class LongRangeLayer(nn.Module):
                 # netm[:,i,j] = torch.from_numpy(gaussian_filter(netp[:,i,j], 0.5))
 
                 # variant where we run gaussian over every orientation 
-                for k in range(int(len(x)/self.ori_stride)):
+                for k in range(int(x.shape[1]/self.ori_stride)):
                     #netm[:,(k*8):(k+1)*8,i,j] = torch.from_numpy(gaussian_filter(netp[:,(k*8):(k+1)*8,i,j], 0.5))
-                    netm[:,(k*8):(k+1)*8,i,j] = F.conv1d(netp[:,(k*8):(k+1)*8,i,j].unsqueeze(1), gauss_center.type(torch.cuda.FloatTensor), padding='same').squeeze(1)
+                    padded_features = F.pad(netp[:,(k*8):(k+1)*8,i,j].unsqueeze(1), (2,2), mode="circular")
+                    netm[:,(k*8):(k+1)*8,i,j] = F.conv1d(padded_features, gauss_center.type(torch.FloatTensor)).squeeze(1)
         
         # spatial gaussian with sigma 8 
         for i in range(x.shape[1]):
             #netm[:,i] = torch.from_numpy(gaussian_filter(netm[:,i], 8.0))
             netm[:,i] = gauss_surround(netm[:,i].unsqueeze(1)).squeeze(1)
         
-        return beta_w * (x * (1 + eta_p * netp)/(a_w + eta_m * netm))
+        return beta_w * (x * (1.0 + eta_p * netp)/(a_w + eta_m * netm))
         
