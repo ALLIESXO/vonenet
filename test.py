@@ -3,13 +3,24 @@ import numpy
 from vonenet import get_model
 from PIL import Image
 import kornia
-
+import sys
+is_windows = hasattr(sys, 'getwindowsversion')
 # global values / parameters 
 gauss_surround = kornia.filters.GaussianBlur2d((7,7), (8.0,8.0))
 model = get_model(controlled_params=True, pretrained=False)
 voneblock = model.module
-dataset_test_image = "R:/Datasets/ILSVRC2012_img_val/ILSVRC2012_val_00000003.JPEG"
-stimulus = "R:/Datasets/LiCircleStim.png"
+if is_windows:
+    dataset_test_image = "R:/Datasets/ILSVRC2012_img_val/ILSVRC2012_val_00000003.JPEG"
+    stimulus = "R:/Datasets/LiCircleStim.png"
+    store_path = "R:"
+else: 
+    dataset_test_image = "/mnt/M2SSD/Datasets/ILSVRC2012_img_val/ILSVRC2012_val_00000003.JPEG"
+    stimulus = "/mnt/M2SSD/Datasets/LiCircleStim.png"
+    store_path = "/mnt/M2SSD"
+
+# very simple stimulis 
+simple_bar_white = "/mnt/M2SSD/Datasets/brbar_simple_.png"
+simple_circle_black = "/mnt/M2SSD/Datasets/circle_simple_black.png"
 
 def tNormalize(t):
     return (t - t.min()) / (t.max() - t.min())
@@ -42,50 +53,15 @@ def save_image_normalized(image, path, name="default"):
 
 if __name__ == '__main__':
     
-    stim_torch = load_image_via_transformation(stimulus)
+    stim_torch = load_image_via_transformation(simple_bar_white)
+    stim_torch = stim_torch[:,:3,:,:]
     result = voneblock(stim_torch)
-    save_image_normalized(result, "R:/VOneBlockResults/")
+    save_image_normalized(result, f"{store_path}/VOneBlockResults/")
     image = voneblock.v1_response
     lr_image = voneblock.v1_lr_response
-    save_image_normalized(lr_image, "R:/LR_Responses/")
+    save_image_normalized(lr_image * 100, f"{store_path}/LR_Responses/")
     image = torchvision.transforms.Normalize(mean=image.mean(), std=image.std())(image)[0]
     for i in range(image.shape[0]):
-        torchvision.transforms.ToPILImage()(image[i]).save( f"R:/V1_Responses/{i}.png")
+        torchvision.transforms.ToPILImage()(image[i]).save( f"{store_path}/V1_Responses/{i}.png")
     print("Done!")
 
-
-
-"""
-for i in range(8):
-    weights = torch.from_numpy(voneblock.lrinteraction.lrfilter[i]).type(torch.float).unsqueeze(0).unsqueeze(0)
-    filtered_stim = torch.nn.functional.conv2d(stimulus_torch[:,1,:,:].unsqueeze(1), weights)
-    torchvision.transforms.ToPILImage()(filtered_stim[0]).save(f"./{i}stimulus.png")
-
-
-stimulus_LR = voneblock(stimulus_torch)[0]
-stimulus_v1 = voneblock.v1_response[0]
-torchvision.transforms.ToPILImage()(stimulus_torch[0]).save(f"./stimulus_center_cropped.png")
-for i in range(512):
-    torchvision.transforms.ToPILImage()(stimulus_v1[i]).save(f"./stim_gfb/stimulus{i}.png")
-    torchvision.transforms.ToPILImage()(stimulus_LR[i]).save(f"./stim_lr/stimulus{i}.png")
-
-# store intermediate cropped image
-torch_image = transforms(image)
-intermediate = torchvision.transforms.ToPILImage()(torch_image[:3])
-intermediate.save(f"intermediate.png", format="png")
-
-torch_image = torch_image.unsqueeze(0)
-result = voneblock(torch_image)[0]
-
-test = result[:8].max(dim=0).values
-torchvision.transforms.ToPILImage()(test).save(f"./test.png", format="png")
-
-normalized_result = (result - result.min()) / (result.max() - result.min())
-
-for i in range(512):
-    filt = torchvision.transforms.ToPILImage()(normalized_result[i])
-    filt.save(f"./filter_outputs/filter{i}.png", format="png")
-    kernel = voneblock.simple_conv_q0.weight.data[i]
-    kernel = torchNormalize(kernel)
-    torchvision.transforms.ToPILImage()(kernel).save(f"./kernels/kernel{i}.png", format="png")
-"""

@@ -43,7 +43,7 @@ class GFB(nn.Module):
 class VOneBlock(nn.Module):
     def __init__(self, sf, theta, sigx, sigy, phase, ori_stride,
                  k_exc=25, noise_mode=None, noise_scale=1, noise_level=1,
-                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=3):
+                 simple_channels=128, complex_channels=128, ksize=25, stride=4, input_size=224, long_range_iterations=5):
         super().__init__()
 
         self.in_channels = 3
@@ -94,7 +94,9 @@ class VOneBlock(nn.Module):
         # Noise [Batch, out_channels, H/stride, W/stride]
         iter = 0 
         for i in range(self.long_range_iterations):
-            """
+            x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
+            self.long_range_feedback = self.lrinteraction(x[:,256:])
+
             ######## TODO: Remove following test chunk of code
             image = x[0].clone().detach()
             # 0 batch size 1 channels 2 height 3 width  
@@ -109,9 +111,6 @@ class VOneBlock(nn.Module):
             else:
                 torchvision.transforms.ToPILImage()(image).save("/tmp/lr_checks/" + f"test.png")
             ######## END of chunk 
-            """
-            x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
-            self.long_range_feedback = self.lrinteraction(x[:,256:])
 
         x[:,256:] = self.combination(x[:,256:], self.long_range_feedback)
         x = F.instance_norm(x)
